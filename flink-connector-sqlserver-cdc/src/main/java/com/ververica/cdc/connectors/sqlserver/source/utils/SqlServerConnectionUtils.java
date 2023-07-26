@@ -18,9 +18,8 @@ package com.ververica.cdc.connectors.sqlserver.source.utils;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.sqlserver.SqlServerConnection;
-import io.debezium.connector.sqlserver.SqlServerConnectorConfig;
+import io.debezium.connector.sqlserver.SqlServerJdbcConfiguration;
 import io.debezium.connector.sqlserver.SqlServerValueConverters;
-import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.RelationalTableFilters;
@@ -45,13 +44,15 @@ public class SqlServerConnectionUtils {
                         connectorConfig.getDecimalMode(),
                         connectorConfig.getTemporalPrecisionMode(),
                         connectorConfig.binaryHandlingMode());
-        return new SqlServerConnection(
-                JdbcConfiguration.adapt(dbzConnectorConfig),
-                ((SqlServerConnectorConfig) connectorConfig).getSourceTimestampMode(),
-                valueConverters,
-                SqlServerConnectionUtils.class::getClassLoader,
-                connectorConfig.getSkippedOperations(),
-                false);
+        return new SqlServerConnection(SqlServerJdbcConfiguration.adapt(dbzConnectorConfig),valueConverters,
+                connectorConfig.getSkippedOperations(),false);
+        // return new SqlServerConnection(
+        //         JdbcConfiguration.adapt(dbzConnectorConfig),
+        //         ((SqlServerConnectorConfig) connectorConfig).getSourceTimestampMode(),
+        //         valueConverters,
+        //         SqlServerConnectionUtils.class::getClassLoader,
+        //         connectorConfig.getSkippedOperations(),
+        //         false);
     }
 
     public static List<TableId> listTables(
