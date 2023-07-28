@@ -34,6 +34,13 @@ import java.util.List;
 /** Utils for SqlServer connection. */
 public class SqlServerConnectionUtils {
     private static final Logger LOG = LoggerFactory.getLogger(SqlServerConnectionUtils.class);
+    // 增加 instanceName配置
+    // jdbc:sqlserver://192.192.192.214;instanceName=TEST;DatabaseName=ODS_CONFIG
+    public static final String URL_INSTANCE_PATTERN =
+            "jdbc:sqlserver://%s;instanceName=%s;databaseName=%s";
+    public static final String DATABASE_INSTANCE_KEY = "database.instance";
+
+    public static final String URL_PATTERN = "jdbc:sqlserver://%s:%s;databaseName=%s";
 
     public static SqlServerConnection createSqlServerConnection(
             RelationalDatabaseConnectorConfig connectorConfig) {
@@ -44,8 +51,11 @@ public class SqlServerConnectionUtils {
                         connectorConfig.getDecimalMode(),
                         connectorConfig.getTemporalPrecisionMode(),
                         connectorConfig.binaryHandlingMode());
-        return new SqlServerConnection(SqlServerJdbcConfiguration.adapt(dbzConnectorConfig),valueConverters,
-                connectorConfig.getSkippedOperations(),false);
+        return new SqlServerConnection(
+                SqlServerJdbcConfiguration.adapt(dbzConnectorConfig),
+                valueConverters,
+                connectorConfig.getSkippedOperations(),
+                false);
         // return new SqlServerConnection(
         //         JdbcConfiguration.adapt(dbzConnectorConfig),
         //         ((SqlServerConnectorConfig) connectorConfig).getSourceTimestampMode(),

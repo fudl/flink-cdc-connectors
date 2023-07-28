@@ -16,20 +16,18 @@
 
 package com.ververica.cdc.connectors.sqlserver.source.dialect;
 
-import com.google.common.base.Strings;
+import org.apache.flink.shaded.guava30.com.google.common.base.Strings;
+
 import com.ververica.cdc.connectors.base.config.JdbcSourceConfig;
 import com.ververica.cdc.connectors.base.relational.connection.JdbcConnectionPoolFactory;
+
+import static com.ververica.cdc.connectors.sqlserver.source.utils.SqlServerConnectionUtils.DATABASE_INSTANCE_KEY;
+import static com.ververica.cdc.connectors.sqlserver.source.utils.SqlServerConnectionUtils.URL_INSTANCE_PATTERN;
 
 /** Factory to create {@link JdbcConnectionPoolFactory} for SQL Server. */
 public class SqlServerPooledDataSourceFactory extends JdbcConnectionPoolFactory {
 
-
     private static final String URL_PATTERN = "jdbc:sqlserver://%s:%s;databaseName=%s";
-    // 增加 instanceName配置
-    // jdbc:sqlserver://192.192.192.214;instanceName=TEST;DatabaseName=ODS_CONFIG
-    private static final String URL_INSTANCE_PATTERN = "jdbc:sqlserver://%s;instanceName=%s;databaseName=%s";
-    private static final String DATABASE_INSTANCE_KEY = "database.instance";
-
 
     @Override
     public String getJdbcUrl(JdbcSourceConfig sourceConfig) {
@@ -37,6 +35,7 @@ public class SqlServerPooledDataSourceFactory extends JdbcConnectionPoolFactory 
         int port = sourceConfig.getPort();
         String database = sourceConfig.getDatabaseList().get(0);
         String instanceName = sourceConfig.getDbzProperties().getProperty(DATABASE_INSTANCE_KEY);
+
         if (!Strings.isNullOrEmpty(instanceName)) {
             return String.format(URL_INSTANCE_PATTERN, hostName, instanceName, database);
         }

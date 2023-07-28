@@ -19,6 +19,8 @@ package com.ververica.cdc.connectors.sqlserver;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.ValidationException;
 
+import org.apache.flink.shaded.guava30.com.google.common.base.Strings;
+
 import com.microsoft.sqlserver.jdbc.SQLServerDriver;
 import com.ververica.cdc.debezium.Validator;
 
@@ -28,6 +30,10 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Properties;
+
+import static com.ververica.cdc.connectors.sqlserver.source.utils.SqlServerConnectionUtils.DATABASE_INSTANCE_KEY;
+import static com.ververica.cdc.connectors.sqlserver.source.utils.SqlServerConnectionUtils.URL_INSTANCE_PATTERN;
+import static com.ververica.cdc.connectors.sqlserver.source.utils.SqlServerConnectionUtils.URL_PATTERN;
 
 /**
  * Validator for SqlServer to validate: SqlServer CDC mechanism is enabled or not, SqlServer version
@@ -85,9 +91,13 @@ public class SqlServerValidator implements Validator {
         String dbname = properties.getProperty("database.dbname");
         String userName = properties.getProperty("database.user");
         String userpwd = properties.getProperty("database.password");
-        return DriverManager.getConnection(
-                "jdbc:sqlserver://" + hostname + ":" + port + ";" + "databaseName=" + dbname,
-                userName,
-                userpwd);
+        String instanceName = properties.getProperty(DATABASE_INSTANCE_KEY);
+
+        String url = String.format(URL_PATTERN, hostname, port, dbname);
+        if (!Strings.isNullOrEmpty(instanceName)) {
+            url = String.format(URL_INSTANCE_PATTERN, hostname, instanceName, dbname);
+        }
+
+        return DriverManager.getConnection(url, userName, userpwd);
     }
 }
