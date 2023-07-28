@@ -36,175 +36,156 @@ import java.util.stream.Collectors;
  * @author Jiri Pechanec
  */
 public class SqlServerConnectorTask
-        extends BaseSourceTask<SqlServerPartition, SqlServerOffsetContext> {
+		extends BaseSourceTask<SqlServerPartition, SqlServerOffsetContext> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerConnectorTask.class);
-    private static final String CONTEXT_NAME = "sql-server-connector-task";
-    private volatile SqlServerTaskContext taskContext;
-    private volatile ChangeEventQueue<DataChangeEvent> queue;
-    private volatile SqlServerConnection dataConnection;
-    private volatile SqlServerConnection metadataConnection;
-    private volatile ErrorHandler errorHandler;
-    private volatile SqlServerDatabaseSchema schema;
+	private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerConnectorTask.class);
+	private static final String CONTEXT_NAME = "sql-server-connector-task";
+	private volatile SqlServerTaskContext taskContext;
+	private volatile ChangeEventQueue<DataChangeEvent> queue;
+	private volatile SqlServerConnection dataConnection;
+	private volatile SqlServerConnection metadataConnection;
+	private volatile ErrorHandler errorHandler;
+	private volatile SqlServerDatabaseSchema schema;
 
-    @Override
-    public String version() {
-        return Module.version();
-    }
+	@Override
+	public String version() {
+		return Module.version();
+	}
 
-    @Override
-    public ChangeEventSourceCoordinator<SqlServerPartition, SqlServerOffsetContext> start(
-            Configuration config) {
-        final Clock clock = Clock.system();
+	@Override
+	public ChangeEventSourceCoordinator<SqlServerPartition, SqlServerOffsetContext> start(
+			Configuration config) {
+		final Clock clock = Clock.system();
 
-        // By default do not load whole result sets into memory
-        config =
-                config.edit()
-                        .withDefault("database.responseBuffering", "adaptive")
-                        .withDefault("database.fetchSize", 10_000)
-                        .build();
+		// By default do not load whole result sets into memory
+		config = config.edit()
+				.withDefault("database.responseBuffering", "adaptive")
+				.withDefault("database.fetchSize", 10_000)
+				.build();
 
-        final SqlServerConnectorConfig connectorConfig = new SqlServerConnectorConfig(config);
-        final TopicSelector<TableId> topicSelector =
-                SqlServerTopicSelector.defaultSelector(connectorConfig);
-        final SchemaNameAdjuster schemaNameAdjuster =
-                connectorConfig.schemaNameAdjustmentMode().createAdjuster();
-        final SqlServerValueConverters valueConverters =
-                new SqlServerValueConverters(
-                        connectorConfig.getDecimalMode(),
-                        connectorConfig.getTemporalPrecisionMode(),
-                        connectorConfig.binaryHandlingMode());
+		final SqlServerConnectorConfig connectorConfig = new SqlServerConnectorConfig(config);
+		final TopicSelector<TableId> topicSelector = SqlServerTopicSelector.defaultSelector(connectorConfig);
+		final SchemaNameAdjuster schemaNameAdjuster = connectorConfig.schemaNameAdjustmentMode().createAdjuster();
+		final SqlServerValueConverters valueConverters = new SqlServerValueConverters(connectorConfig.getDecimalMode(),
+				connectorConfig.getTemporalPrecisionMode(), connectorConfig.binaryHandlingMode());
 
-        dataConnection =
-                new SqlServerConnection(
-                        connectorConfig.getJdbcConfig(),
-                        valueConverters,
-                        connectorConfig.getSkippedOperations(),
-                        connectorConfig.useSingleDatabase(),
-                        connectorConfig.getOptionRecompile());
-        metadataConnection =
-                new SqlServerConnection(
-                        connectorConfig.getJdbcConfig(),
-                        valueConverters,
-                        connectorConfig.getSkippedOperations(),
-                        connectorConfig.useSingleDatabase());
+		dataConnection = new SqlServerConnection(connectorConfig.getJdbcConfig(), valueConverters,
+				connectorConfig.getSkippedOperations(), connectorConfig.useSingleDatabase(),
+				connectorConfig.getOptionRecompile());
+		metadataConnection = new SqlServerConnection(connectorConfig.getJdbcConfig(), valueConverters,
+				connectorConfig.getSkippedOperations(), connectorConfig.useSingleDatabase());
 
-        this.schema =
-                new SqlServerDatabaseSchema(
-                        connectorConfig,
-                        metadataConnection.getDefaultValueConverter(),
-                        valueConverters,
-                        topicSelector,
-                        schemaNameAdjuster);
-        this.schema.initializeStorage();
+		this.schema = new SqlServerDatabaseSchema(connectorConfig, metadataConnection.getDefaultValueConverter(), valueConverters,
+				topicSelector, schemaNameAdjuster);
 
-        Offsets<SqlServerPartition, SqlServerOffsetContext> offsets =
-                getPreviousOffsets(
-                        new SqlServerPartition.Provider(connectorConfig, config),
-                        new SqlServerOffsetContext.Loader(connectorConfig));
+		this.schema.initializeStorage();
+		Offsets<SqlServerPartition, SqlServerOffsetContext> offsets =
+				getPreviousOffsets(
+						new SqlServerPartition.Provider(connectorConfig, config),
+						new SqlServerOffsetContext.Loader(connectorConfig));
 
-        schema.recover(offsets);
+		schema.recover(offsets);
 
-        taskContext = new SqlServerTaskContext(connectorConfig, schema);
+		taskContext = new SqlServerTaskContext(connectorConfig, schema);
 
-        // Set up the task record queue ...
-        this.queue =
-                new ChangeEventQueue.Builder<DataChangeEvent>()
-                        .pollInterval(connectorConfig.getPollInterval())
-                        .maxBatchSize(connectorConfig.getMaxBatchSize())
-                        .maxQueueSize(connectorConfig.getMaxQueueSize())
-                        .maxQueueSizeInBytes(connectorConfig.getMaxQueueSizeInBytes())
-                        .loggingContextSupplier(
-                                () -> taskContext.configureLoggingContext(CONTEXT_NAME))
-                        .build();
+		// Set up the task record queue ...
+		this.queue =
+				new ChangeEventQueue.Builder<DataChangeEvent>()
+						.pollInterval(connectorConfig.getPollInterval())
+						.maxBatchSize(connectorConfig.getMaxBatchSize())
+						.maxQueueSize(connectorConfig.getMaxQueueSize())
+						.maxQueueSizeInBytes(connectorConfig.getMaxQueueSizeInBytes())
+						.loggingContextSupplier(
+								() -> taskContext.configureLoggingContext(CONTEXT_NAME))
+						.build();
 
-        errorHandler = new SqlServerErrorHandler(connectorConfig, queue);
+		errorHandler = new SqlServerErrorHandler(connectorConfig, queue);
 
-        final SqlServerEventMetadataProvider metadataProvider =
-                new SqlServerEventMetadataProvider();
+		final SqlServerEventMetadataProvider metadataProvider =
+				new SqlServerEventMetadataProvider();
 
-        final EventDispatcher<SqlServerPartition, TableId> dispatcher =
-                new EventDispatcher<>(
-                        connectorConfig,
-                        topicSelector,
-                        schema,
-                        queue,
-                        connectorConfig.getTableFilters().dataCollectionFilter(),
-                        DataChangeEvent::new,
-                        metadataProvider,
-                        schemaNameAdjuster);
+		final EventDispatcher<SqlServerPartition, TableId> dispatcher =
+				new EventDispatcher<>(
+						connectorConfig,
+						topicSelector,
+						schema,
+						queue,
+						connectorConfig.getTableFilters().dataCollectionFilter(),
+						DataChangeEvent::new,
+						metadataProvider,
+						schemaNameAdjuster);
 
-        ChangeEventSourceCoordinator<SqlServerPartition, SqlServerOffsetContext> coordinator =
-                new SqlServerChangeEventSourceCoordinator(
-                        offsets,
-                        errorHandler,
-                        SqlServerConnector.class,
-                        connectorConfig,
-                        new SqlServerChangeEventSourceFactory(
-                                connectorConfig,
-                                dataConnection,
-                                metadataConnection,
-                                errorHandler,
-                                dispatcher,
-                                clock,
-                                schema),
-                        // createChangeEventSourceMetricsFactory(connectorConfig.isMultiPartitionModeEnabled(), offsets),
-                        createChangeEventSourceMetricsFactory(true, offsets),
-                        dispatcher,
-                        schema,
-                        clock);
+		ChangeEventSourceCoordinator<SqlServerPartition, SqlServerOffsetContext> coordinator =
+				new SqlServerChangeEventSourceCoordinator(
+						offsets,
+						errorHandler,
+						SqlServerConnector.class,
+						connectorConfig,
+						new SqlServerChangeEventSourceFactory(
+								connectorConfig,
+								dataConnection,
+								metadataConnection,
+								errorHandler,
+								dispatcher,
+								clock,
+								schema),
+						// createChangeEventSourceMetricsFactory(connectorConfig.isMultiPartitionModeEnabled(), offsets),
+						createChangeEventSourceMetricsFactory(true, offsets),
+						dispatcher,
+						schema,
+						clock);
 
-        coordinator.start(taskContext, this.queue, metadataProvider);
+		coordinator.start(taskContext, this.queue, metadataProvider);
 
-        return coordinator;
-    }
+		return coordinator;
+	}
 
-    @Override
-    public List<SourceRecord> doPoll() throws InterruptedException {
-        final List<DataChangeEvent> records = queue.poll();
+	@Override
+	public List<SourceRecord> doPoll() throws InterruptedException {
+		final List<DataChangeEvent> records = queue.poll();
 
-        final List<SourceRecord> sourceRecords =
-                records.stream().map(DataChangeEvent::getRecord).collect(Collectors.toList());
+		final List<SourceRecord> sourceRecords =
+				records.stream().map(DataChangeEvent::getRecord).collect(Collectors.toList());
 
-        return sourceRecords;
-    }
+		return sourceRecords;
+	}
 
-    @Override
-    protected void doStop() {
-        try {
-            if (dataConnection != null) {
-                dataConnection.close();
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Exception while closing JDBC connection", e);
-        }
+	@Override
+	protected void doStop() {
+		try {
+			if (dataConnection != null) {
+				dataConnection.close();
+			}
+		} catch (SQLException e) {
+			LOGGER.error("Exception while closing JDBC connection", e);
+		}
 
-        try {
-            if (metadataConnection != null) {
-                metadataConnection.close();
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Exception while closing JDBC metadata connection", e);
-        }
+		try {
+			if (metadataConnection != null) {
+				metadataConnection.close();
+			}
+		} catch (SQLException e) {
+			LOGGER.error("Exception while closing JDBC metadata connection", e);
+		}
 
-        if (schema != null) {
-            schema.close();
-        }
-    }
+		if (schema != null) {
+			schema.close();
+		}
+	}
 
-    @Override
-    protected Iterable<Field> getAllConfigurationFields() {
-        return SqlServerConnectorConfig.ALL_FIELDS;
-    }
+	@Override
+	protected Iterable<Field> getAllConfigurationFields() {
+		return SqlServerConnectorConfig.ALL_FIELDS;
+	}
 
-    private ChangeEventSourceMetricsFactory<SqlServerPartition>
-            createChangeEventSourceMetricsFactory(
-                    boolean multiPartitionMode,
-                    Offsets<SqlServerPartition, SqlServerOffsetContext> offsets) {
-        if (multiPartitionMode) {
-            return new SqlServerMetricsFactory(offsets.getPartitions());
-        } else {
-            return new DefaultChangeEventSourceMetricsFactory<>();
-        }
-    }
+	private ChangeEventSourceMetricsFactory<SqlServerPartition>
+	createChangeEventSourceMetricsFactory(
+			boolean multiPartitionMode,
+			Offsets<SqlServerPartition, SqlServerOffsetContext> offsets) {
+		if (multiPartitionMode) {
+			return new SqlServerMetricsFactory(offsets.getPartitions());
+		} else {
+			return new DefaultChangeEventSourceMetricsFactory<>();
+		}
+	}
 }
