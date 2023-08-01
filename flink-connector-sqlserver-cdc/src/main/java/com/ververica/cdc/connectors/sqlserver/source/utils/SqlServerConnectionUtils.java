@@ -18,6 +18,7 @@ package com.ververica.cdc.connectors.sqlserver.source.utils;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.sqlserver.SqlServerConnection;
+import io.debezium.connector.sqlserver.SqlServerConnectorConfig;
 import io.debezium.connector.sqlserver.SqlServerJdbcConfiguration;
 import io.debezium.connector.sqlserver.SqlServerValueConverters;
 import io.debezium.jdbc.JdbcConnection;
@@ -53,6 +54,7 @@ public class SqlServerConnectionUtils {
                         connectorConfig.binaryHandlingMode());
         return new SqlServerConnection(
                 SqlServerJdbcConfiguration.adapt(dbzConnectorConfig),
+                ((SqlServerConnectorConfig) connectorConfig).getSourceTimestampMode(),
                 valueConverters,
                 connectorConfig.getSkippedOperations(),
                 false);
